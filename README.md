@@ -1,155 +1,153 @@
-# Frustum Culling 视锥剔除
+# Kegelstumpf-Ausmerzung
 
-**说明：**
+**veranschaulichen:**
 
-打开本项目后，请不要直接打开index.html，必须在项目目录下运行一个web server，否则会出现模型加载异常，或者可以直接访问 https://closecv.com/frustumculling 如果直接在线访问本项目，因为模型较大，受网速限制请耐心等待网页打开（可能要十多秒…… 模型13m大）。
+Öffnen Sie index.html nach dem Öffnen dieses Projekts nicht direkt. Sie müssen einen Webserver im Projektverzeichnis ausführen, da sonst eine Ausnahme beim Laden des Modells auftritt. Alternativ können Sie direkt auf https://closecv.com/frustumculling zugreifen. Wenn Sie direkt online auf dieses Projekt zugreifen, bitten wir Sie, aufgrund der Größe des Modells aufgrund von Netzwerkgeschwindigkeitsbeschränkungen geduldig zu warten, bis die Webseite geöffnet wird (dies kann länger als zehn Sekunden dauern ... Das Modell ist 13 m groß).
 
 
 
-**实验目的：**
+**Zweck des Experiments:**
 
-1. 实现视锥剔除算法
-2. 尝试使用不同的剔除方法(AABB/OBB…), 测一下性能分别如何，给出实验数据
+1. Implementieren Sie den Frustum-Culling-Algorithmus
+2. Probieren Sie verschiedene Auslesemethoden (AABB/OBB...) aus, messen Sie die Leistung und stellen Sie experimentelle Daten bereit
 
-**实验原理：**
+**Versuchsprinzip:**
 
-​	视锥(准确说是平截头体Frustum)的形状酷似一个塔尖被削平了的金字塔,更准确地说,是一个四棱锥的顶点偏下位置被一个裁面(Clipping Plane,见图1)裁断.事实上,视锥本身就是由6个面所组成.这6个面被称为近裁面,远裁面,上裁面,下裁面,左裁面,右裁面.视锥剪裁仅仅是一个用来判断物体是否需要被绘制的过程.尽管从本质上讲视锥剔除应该是三维层面的,但事实上大多数时候它仅仅需要以纯代数的方法便能解决.而且是在渲染管线(Rendering Pipeline)之前进行的,不像背面剔除(Backface Culling)那样需要在渲染管线之后一个顶点一个顶点地计算.对于被剪裁掉的物体绘图引擎都不会将其送入显卡,因此视锥剔除对渲染速度有巨大的改善,毕竟什么都不渲染是最快的渲染.
+Die Form des Kegelstumpfs (oder genauer gesagt des Frustums) ähnelt einer Pyramide mit abgeflachter Spitze. Genauer gesagt handelt es sich um eine vierseitige Pyramide mit einer Clipping-Ebene (siehe Abbildung 1), die den unteren Teil ihres Scheitelpunkts abschneidet. Der Kegelstumpf selbst besteht aus sechs Flächen. Diese sechs Flächen werden als nahe Clipping-Ebene, ferne Clipping-Ebene, obere Clipping-Ebene, untere Clipping-Ebene, linke Clipping-Ebene und rechte Clipping-Ebene bezeichnet. Frustum-Clipping ist lediglich ein Prozess, mit dem bestimmt wird, ob ein Objekt gezeichnet werden muss. Obwohl Frustum-Culling dreidimensional sein sollte, lässt es sich in den meisten Fällen mit rein algebraischen Methoden lösen. Und es wird vor der Rendering-Pipeline durchgeführt, im Gegensatz zum Backface-Culling, das nach der Rendering-Pipeline Scheitelpunkt für Scheitelpunkt berechnet werden muss. Die Grafik-Engine sendet die abgeschnittenen Objekte nicht an die Grafikkarte, daher verbessert Frustum-Culling die Rendergeschwindigkeit enorm. Schließlich ist Nichts-Rendering das schnellste Rendering.
 
 ![](http://static.oschina.net/uploads/img/201310/20020542_5jKt.png)
 
-**实验内容：**
+**Experimenteller Inhalt:**
 
-​	因为精力有限，本次实验使用 **three.js**完成，使用到的重要的类有**Frustum**和**Boxhelper**。
+Aufgrund begrenzter Energie wurde dieses Experiment mit **three.js** durchgeführt und die verwendeten wichtigen Klassen waren **Frustum** und **Boxhelper**.
 
-​	Frustum类是一个封装了平截头体以及其相关方法的类，例如intersectsBox方法和intersectsSphere方法可以非常方便的求平截头体和包围盒或包围球的位置关系。而Boxhelper可以根据物体方便得求其包围盒或包围球。之后要做的事就是剔除在视锥之外的物体了。
+Die Frustum-Klasse ist eine Klasse, die den Kegelstumpf und die zugehörigen Methoden kapselt. Beispielsweise können die Methoden intersectsBox und intersectsSphere leicht die Positionsbeziehung zwischen dem Kegelstumpf und dem Begrenzungsrahmen bzw. der Begrenzungskugel ermitteln. Boxhelper kann den Begrenzungsrahmen oder die Begrenzungskugel des Objekts leicht finden. Als Nächstes müssen Objekte außerhalb des Sichtkegels ausgesondert werden.
 
 
 
-相关源码
+Zugehöriger Quellcode
 
-使用相机的投影矩阵和世界坐标系变换矩阵的逆构建Frustum:
+Konstruieren Sie Frustum mithilfe der Projektionsmatrix der Kamera und der Inversen der Transformationsmatrix des Weltkoordinatensystems:
 
 ```js
-setFromMatrix: function ( m ) {
+setFromMatrix: Funktion ( m ) {
 
-		var planes = this.planes;
-		var me = m.elements;
-		var me0 = me[ 0 ], me1 = me[ 1 ], me2 = me[ 2 ], me3 = me[ 3 ];
-		var me4 = me[ 4 ], me5 = me[ 5 ], me6 = me[ 6 ], me7 = me[ 7 ];
-		var me8 = me[ 8 ], me9 = me[ 9 ], me10 = me[ 10 ], me11 = me[ 11 ];
-		var me12 = me[ 12 ], me13 = me[ 13 ], me14 = me[ 14 ], me15 = me[ 15 ];
+ var planes = diese.planes;
+ var me = m.elements;
+ var me0 = mich[ 0 ], me1 = mich[ 1 ], me2 = mich[ 2 ], me3 = mich[ 3 ];
+ var me4 = me[ 4 ], me5 = me[ 5 ], me6 = me[ 6 ], me7 = me[ 7 ];
+ var me8 = me[ 8 ], me9 = me[ 9 ], me10 = me[ 10 ], me11 = me[ 11 ];
+ var me12 = me[ 12 ], me13 = me[ 13 ], me14 = me[ 14 ], me15 = me[ 15 ];
 
-		planes[ 0 ].setComponents( me3 - me0, me7 - me4, me11 - me8, me15 - me12 ).normalize();
-		planes[ 1 ].setComponents( me3 + me0, me7 + me4, me11 + me8, me15 + me12 ).normalize();
-		planes[ 2 ].setComponents( me3 + me1, me7 + me5, me11 + me9, me15 + me13 ).normalize();
-		planes[ 3 ].setComponents( me3 - me1, me7 - me5, me11 - me9, me15 - me13 ).normalize();
-		planes[ 4 ].setComponents( me3 - me2, me7 - me6, me11 - me10, me15 - me14 ).normalize();
-		planes[ 5 ].setComponents( me3 + me2, me7 + me6, me11 + me10, me15 + me14 ).normalize();
+ Ebenen[ 0 ].setComponents( me3 - me0, me7 - me4, me11 - me8, me15 - me12 ).normalisieren();
+ Ebenen[ 1 ].setComponents( me3 + me0, me7 + me4, me11 + me8, me15 + me12 ).normalisieren();
+ Ebenen[ 2 ].setComponents( me3 + me1, me7 + me5, me11 + me9, me15 + me13 ).normalisieren();
+ Ebenen[ 3 ].setComponents( me3 - me1, me7 - me5, me11 - me9, me15 - me13 ).normalisieren();
+ Ebenen[ 4 ].setComponents( me3 - me2, me7 - me6, me11 - me10, me15 - me14 ).normalize();
+ Ebenen[ 5 ].setComponents( me3 + me2, me7 + me6, me11 + me10, me15 + me14 ).normalisieren();
 
-		return this;
+ gib dies zurück;
 
-	}
+ }
 ```
 
 
 
-判断Frustum和包围球是否相交：
+Bestimmen Sie, ob sich der Kegelstumpf und die umgebende Kugel schneiden:
 
 ```js
-intersectsSphere: function ( sphere ) {
+intersectsSphere: Funktion (Kugel) {
 
-		var planes = this.planes;
-		var center = sphere.center;
-		var negRadius = - sphere.radius;
+ var planes = diese.planes;
+ var Zentrum = Kugel.Zentrum;
+ var negRadius = - Kugel.Radius;
 
-		for ( var i = 0; i < 6; i ++ ) {
+ für (var i = 0; i < 6; i++) {
 
-			var distance = planes[ i ].distanceToPoint( center );
+ var Abstand = Ebenen[i].AbstandZumPunkt(Mitte);
 
-			if ( distance < negRadius ) {
+ wenn (Abstand < negRadius) {
 
-				return false;
+ gibt false zurück;
 
-			}
+ }
 
-		}
+ }
 
-		return true;
+ gibt true zurück;
 
-	}
+ }
 ```
 
 
 
 
 
-判断Frustum和包围盒是否相交：
+Bestimmen Sie, ob sich das Kegelstumpf und der Begrenzungsrahmen schneiden:
 
 ```js
-intersectsBox: function () {
+intersectsBox: Funktion () {
 
-		var p1 = new Vector3(),
-			p2 = new Vector3();
+ var p1 = neuer Vektor3(),
+ p2 = neuer Vektor3();
 
-		return function intersectsBox( box ) {
+ Rückgabefunktion intersectsBox( box ) {
 
-			var planes = this.planes;
+ var planes = diese.planes;
 
-			for ( var i = 0; i < 6; i ++ ) {
+ für (var i = 0; i < 6; i++) {
 
-				var plane = planes[ i ];
+ var Ebene = Ebenen[i];
 
-				p1.x = plane.normal.x > 0 ? box.min.x : box.max.x;
-				p2.x = plane.normal.x > 0 ? box.max.x : box.min.x;
-				p1.y = plane.normal.y > 0 ? box.min.y : box.max.y;
-				p2.y = plane.normal.y > 0 ? box.max.y : box.min.y;
-				p1.z = plane.normal.z > 0 ? box.min.z : box.max.z;
-				p2.z = plane.normal.z > 0 ? box.max.z : box.min.z;
+ p1.x = Ebene.normal.x > 0 ? Box.min.x : Box.max.x;
+ p2.x = Ebene.normal.x > 0 ? Box.max.x : Box.min.x;
+ p1.y = Ebene.normal.y > 0 ? Box.min.y : Box.max.y;
+ p2.y = Ebene.normal.y > 0 ? Box.max.y : Box.min.y;
+ p1.z = Ebene.normal.z > 0 ? Box.min.z : Box.max.z;
+ p2.z = Ebene.normal.z > 0 ? Box.max.z : Box.min.z;
 
-				var d1 = plane.distanceToPoint( p1 );
-				var d2 = plane.distanceToPoint( p2 );
+ var d1 = plane.distanceToPoint( p1 );
+ var d2 = plane.distanceToPoint( p2 );
 
-				// if both outside plane, no intersection
+ // wenn beide außerhalb der Ebene liegen, kein Schnittpunkt
 
-				if ( d1 < 0 && d2 < 0 ) {
+ wenn ( d1 < 0 und d2 < 0 ) {
 
-					return false;
+ gibt false zurück;
 
-				}
+ }
 
-			}
+ }
 
-			return true;
+ gibt true zurück;
 
-		}
+ }
 ```
 
 
 
-**实验成果：**
+**Experimentelle Ergebnisse:**
 
 ![](https://ws1.sinaimg.cn/large/006gbcdOgy1frzki4qz13g30z50i3kjl.jpg)
 
-如上图所示，当刚打开web界面时，坐标原点处会出现一把狙击枪，此时可以转动视角或拉近距离观看，fps都一直稳定在60左右。当点击添加物体后，会出现更多的狙击枪，当狙击枪数量到十多吧以后我们明显看到帧率下降，这时候打开剔除算法，帧率又得到一定提升。当摄像头拉近，只观察位于原点的狙击枪时，由于其他狙击枪都被剔除了，帧率又恢复到了60帧。
+Wie im obigen Bild zu sehen, erscheint beim Öffnen der Weboberfläche ein Scharfschützengewehr am Ursprung des Koordinatensystems. Sie können die Ansicht drehen oder hineinzoomen, um sie anzusehen. Die Bildrate bleibt stabil bei etwa 60. Wenn Sie per Mausklick ein Objekt hinzufügen, werden weitere Scharfschützengewehre angezeigt. Bei über zehn Scharfschützengewehren sinkt die Bildrate deutlich. Aktivieren Sie in diesem Fall den Culling-Algorithmus, um die Bildrate etwas zu verbessern. Wenn die Kamera heranzoomt und nur das Scharfschützengewehr am Ursprungsort beobachtet, kehrt die Bildrate auf 60 Bilder zurück, da alle anderen Scharfschützengewehre eliminiert werden.
 
-**实验数据：**
+**Experimentelle Daten:**
 
 ![](https://ws1.sinaimg.cn/large/006gbcdOgy1frzmaihtjfj31lg0dugnh.jpg)
 
-我们可以看出：
+Wir können Folgendes sehen:
 
-1. 使用剔除算法后，当拉近摄像头时，渲染速度会非常快，因为绝大多数物体都被剔除了。
-2. 即使是远景下，因为可以剔除部分物体，渲染速度也得到了明显加快。
-3. 在实验中，AABB包围盒和包围球没有明显优劣。
+1. Wenn Sie nach der Verwendung des Culling-Algorithmus mit der Kamera hineinzoomen, ist die Rendergeschwindigkeit sehr hoch, da die meisten Objekte aussortiert werden.
+2. Auch in der Fernansicht wird die Rendergeschwindigkeit deutlich beschleunigt, da einige Objekte ausgeblendet werden können.
+3. Im Experiment gibt es keinen offensichtlichen Vorteil oder Nachteil zwischen AABB-Begrenzungsrahmen und Begrenzungskugel.
 
-**实验参考：**
+** Experimentelle Referenz: **
 
-1. [Frustum - three.js docs]: https://threejs.org/docs/#api/math/Frustum
+1. [Frustum – three.js-Dokumente]: https://threejs.org/docs/#api/math/Frustum
 
-2. [THREE.js check if object is in frustum - Stack Overflow]: https://stackoverflow.com/questions/24877880/three-js-check-if-object-is-in-frustum
+2. [THREE.js prüft, ob sich ein Objekt im Kegelstumpf befindet – Stack Overflow]: https://stackoverflow.com/questions/24877880/three-js-check-if-object-is-in-frustum
 
-3. [three.js 如何判断一个坐标是否在相机视野内？ - 知乎]: https://www.zhihu.com/question/49989787
+3. [Wie bestimmt three.js, ob eine Koordinate im Sichtfeld der Kamera liegt? - Zhihu]: https://www.zhihu.com/question/49989787
 
-4. [[3D图形学\]视锥剔除入门(翻译) - szszss]: https://my.oschina.net/u/999400/blog/170062
-
-   
+4. [[3D-Grafik\] Einführung in Frustum Culling (Übersetzung) - szszss]: https://my.oschina.net/u/999400/blog/170062
